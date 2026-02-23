@@ -11,8 +11,16 @@ With the given resources you are able to make a typical digit recognition AI usi
 Features:
 
 - load data from files (here MNIST labels & images)
-- multiple activation functions for each layer (except input layer)
-  and loss type
+- multiple activation functions for each layer (except input layer):
+  - Sigmoid
+  - Tanh
+  - ReLU
+  - Leaky ReLU
+  - Softmax
+  - Linear
+- and loss types:
+  - MSE Loss (Mean Squared Error)
+  - CEL (Cross Entropy Loss)
 - shuffling
 - momentum
 - label smoothing
@@ -60,3 +68,43 @@ int main() {
 
 In this example, we train 10 epochs (each epoch will automatically create a save of the network as a .bin extension.
 We train with batches each 64 and 0.05 learn rate. Before we also set momentum to 90%, learn rate decay to 99% and label smoothing to 0.1
+
+## Documentation
+
+`neural_network *cpai_create_network(i32 i, veci h,
+                                    i32 o, veci ha,
+                                    activation_type oa,
+                                    loss_type ol, f32 m,
+                                    f32 lrd, f32 lsr,
+                                    b8 ls);`
+> i = input neurons\
+> h = array of hidden neurons (for multiple layers)\
+> o = output neurons\
+> ha = hidden activation function(s)\
+> oa = output activation function\
+> ol = output loss type\
+> m = momentum rate\
+> lrd = learn rate decay\
+> lsr = label smooth rate\
+> ls = toggle use of label smoothing
+
+`void cpai_init_weights(neural_network *net);`
+> initialize weights and biases (with He, Xavier etc. depending on activations)
+
+`void cpai_destroy_network(neural_network *net);`
+
+`void cpai_load_network_bin(neural_network *net, char *path);`
+
+`void cpai_save_network_bin(neural_network *net, char *path);`
+
+`void cpai_load_train_data_network(neural_network *net, char *data_path, char *label_path, i32 sol_row_len);`
+
+`void cpai_load_test_data_network(neural_network *net, char *data_path, char *label_path);`
+
+`vecf cpai_feed_forward(neural_network *net, vecf *input);`
+> returns results from output
+
+`void cpai_train_network(neural_network *net, f32 learn_rate, i32 epochs, i32 batch_size);`
+
+`f32 cpai_test_network(neural_network *net);`
+> returns accuracy in %
