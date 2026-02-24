@@ -8,8 +8,6 @@ which should be something like PyTorch but it is written and used in C.
 Currently you are able to create a neural network with fixed input and output layers but scalable hidden ones + you are free to choose the amount of neurons for each layer. Also you can choose your activation function like Sigmoid, ReLu, Leaky ReLu, Tanh and Softmax or Linear (both used for output only).
 With the given resources you are able to make a typical digit recognition AI using the MNIST database. For now you are only restricted by classification not regression (I think) and supervised machine learning.
 
-Features:
-
 - load data from files (here MNIST labels & images)
 - multiple activation functions for each layer (except input layer):
   - Sigmoid
@@ -36,7 +34,7 @@ More optimizations will be introduced eventually and more
 Here is an example code for the neural network with 784 input neurons, 10 output neurons
 and 2 hidden layers one with 256 the other 128 neurons. ReLU only is used with Softmax and Cross Entropy:
 
-```
+```c
 #include "../cpai/cpai.h"
 
 int main() {
@@ -69,42 +67,41 @@ int main() {
 In this example, we train 10 epochs (each epoch will automatically create a save of the network as a .bin extension.
 We train with batches each 64 and 0.05 learn rate. Before we also set momentum to 90%, learn rate decay to 99% and label smoothing to 0.1
 
-## Documentation
+## Features
 
-`neural_network *cpai_create_network(i32 i, veci h,
-                                    i32 o, veci ha,
-                                    activation_type oa,
-                                    loss_type ol, f32 m,
-                                    f32 lrd, f32 lsr,
-                                    b8 ua);`
-> i = input neurons\
-> h = array of hidden neurons (for multiple layers)\
-> o = output neurons\
-> ha = hidden activation function(s)\
-> oa = output activation function\
-> ol = output loss type\
-> m = momentum rate\
-> lrd = learn rate decay\
-> lsr = label smooth rate\
-> ua = toggle use of AVX2 (on modern CPUs for a little faster training if supported)
+```c
+neural_network *cpai_create_network(i32 i, veci h, i32 o, veci ha, activation_type oa, loss_type ol, f32 m, f32 lrd, f32 lsr, b8 ua);
+/*
+i = input neurons
+h = array of hidden neurons (for multiple layers)
+o = output neurons
+ha = hidden activation function(s)
+oa = output activation function
+ol = output loss type
+m = momentum rate
+lrd = learn rate decay
+lsr = label smooth rate
+ua = toggle use of AVX2 (on modern CPUs for a little faster training if supported)
+*/
 
-`void cpai_init_weights(neural_network *net);`
-> initialize weights and biases (with He, Xavier etc. depending on activations)
+void cpai_init_weights(neural_network *net);
+// initialize weights and biases (with He, Xavier etc. depending on activations)
 
-`void cpai_destroy_network(neural_network *net);`
+void cpai_destroy_network(neural_network *net);
 
-`void cpai_load_network_bin(neural_network *net, char *path);`
+void cpai_load_network_bin(neural_network *net, char *path);
 
-`void cpai_save_network_bin(neural_network *net, char *path);`
+void cpai_save_network_bin(neural_network *net, char *path);
 
-`void cpai_load_train_data_network(neural_network *net, char *data_path, char *label_path, i32 sol_row_len);`
+void cpai_load_train_data_network(neural_network *net, char *data_path, char *label_path, i32 sol_row_len);
 
-`void cpai_load_test_data_network(neural_network *net, char *data_path, char *label_path);`
+void cpai_load_test_data_network(neural_network *net, char *data_path, char *label_path);
 
-`vecf cpai_feed_forward(neural_network *net, vecf *input);`
-> returns results from output
+vecf cpai_feed_forward(neural_network *net, vecf *input);
+// returns results from output
 
-`void cpai_train_network(neural_network *net, f32 learn_rate, i32 epochs, i32 batch_size);`
+void cpai_train_network(neural_network *net, f32 learn_rate, i32 epochs, i32 batch_size);
 
-`f32 cpai_test_network(neural_network *net);`
-> returns accuracy in %
+f32 cpai_test_network(neural_network *net);
+// returns accuracy in %
+```
