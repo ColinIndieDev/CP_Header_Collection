@@ -11,15 +11,6 @@ typedef struct {
     u64 pos;
 } mem_arena;
 
-#define BYTE(n) ((n) / 8.0f)
-#define KB(n) ((n) / 1000.0f)
-#define MB(n) ((n) / 1000000.0f)
-#define GB(n) ((n) / 1000000000.0f)
-
-#define KiB(n) ((u64)(n) << 10)
-#define MiB(n) ((u64)(n) << 20)
-#define GiB(n) ((u64)(n) << 30)
-
 #define ALIGN_POW2(n, p) (((u64)(n) + ((u64)(p) - 1)) & (~((u64)(p) - 1)))
 #define ARENA_BASE_POS (sizeof(mem_arena))
 #define ARENA_ALIGN (sizeof(void *))

@@ -53,6 +53,10 @@ void cplt_disable_raw_mode() {
 }
 
 void cplt_activate_raw_mode() {
+#ifdef _WIN32
+    fprintf(stderr, "Windows is not supported! (termios)\n");
+#endif
+
     tcgetattr(STDIN_FILENO, &orig_termios);
     atexit(cplt_disable_raw_mode);
 

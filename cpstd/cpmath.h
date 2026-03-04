@@ -5,10 +5,6 @@
 
 #define CPM_PI 3.14159265358979323846f
 
-#define CPM_F32_MAX 3.402823466e+38f
-#define CPM_U32_MAX 4294967295
-#define CPM_I16_MAX 32767
-
 #define CPM_MIN(x, y) ((x) < (y) ? (x) : (y))
 #define CPM_MAX(x, y) ((x) > (y) ? (x) : (y))
 #define CPM_ABS(x) ((x) > 0 ? (x) : -(x))

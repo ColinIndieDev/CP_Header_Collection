@@ -83,6 +83,7 @@
             }                                                                  \
             idx = (idx + 1) % m->capacity;                                     \
         }                                                                      \
+        return NULL;                                                           \
     }                                                                          \
     void name##_remove(name *m, key_type key) {                                \
         u32 idx = name##_hash(key) % m->capacity;                              \

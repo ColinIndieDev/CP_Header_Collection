@@ -49,8 +49,12 @@
     }                                                                          \
     void name##_push_front(name *vec, type val) {                              \
         if (vec->size >= vec->capacity) {                                      \
-            vec->capacity *= 2;                                                \
-            vec->data = realloc(vec->data, vec->capacity * sizeof(type));      \
+            type *new_data =                                                   \
+                realloc(vec->data, (u64)vec->capacity * 2 * sizeof(type));     \
+            if (new_data != NULL) {                                            \
+                vec->capacity *= 2;                                            \
+                vec->data = new_data;                                          \
+            }                                                                  \
         }                                                                      \
         memmove(&vec->data[1], &vec->data[0], vec->size * sizeof(type));       \
         vec->data[0] = val;                                                    \

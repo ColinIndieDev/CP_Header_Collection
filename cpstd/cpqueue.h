@@ -103,8 +103,8 @@
     }                                                                          \
     void name##_heapify_down(name *q, u32 i) {                                 \
         while (true) {                                                         \
-            u32 left = 2 * i + 1;                                              \
-            u32 right = 2 * i + 2;                                             \
+            u32 left = (2 * i) + 1;                                            \
+            u32 right = (2 * i) + 2;                                           \
             u32 smallest = i;                                                  \
             if (left < q->size &&                                              \
                 q->data[left].priority > q->data[smallest].priority) {         \
@@ -125,8 +125,12 @@
     }                                                                          \
     void name##_push(name *q, type val, f32 priority) {                        \
         if (q->size >= q->capacity) {                                          \
-            q->capacity *= 2;                                                  \
-            q->data = realloc(q->data, q->capacity * sizeof(name##_node));     \
+            name##_node *new_data =                                            \
+                realloc(q->data, (u64)q->capacity * 2 * sizeof(name##_node));  \
+            if (new_data != NULL) {                                            \
+                q->data = new_data;                                            \
+                q->capacity *= 2;                                              \
+            }                                                                  \
         }                                                                      \
         q->data[q->size] = (name##_node){val, priority};                       \
         name##_heapify_up(q, q->size);                                         \
