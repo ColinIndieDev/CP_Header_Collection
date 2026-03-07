@@ -1,8 +1,8 @@
 # CP Header Collection
 
 ## About
-This is my collection of libraries / header files I made (except CPL & CPLT or CPAI) entirely in C.
-Most of the stuff I wrote before is C++ so I also try to convert it as well into C
+This is my collection of libraries / header files I made entirely in C.
+Most of the stuff I wrote before is C++ so I also try to convert it as well into C (in that case CPL is left)
 
 ## Projects
 
