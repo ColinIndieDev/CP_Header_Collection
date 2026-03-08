@@ -62,3 +62,7 @@ f32 cprng_randf() { return cpm_floorf((f32)cprng_rand() / 100000.0f) + cprng_ran
 f32 cprng_randf_range(f32 min, f32 max) {
     return min + (cprng_randf_norm() * (max - min));
 }
+
+i32 cprng_rand_range(i32 min, i32 max) {
+    return min + (i32)(cprng_rand() % (max - min + 1));
+}

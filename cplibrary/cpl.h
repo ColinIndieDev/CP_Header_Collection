@@ -22,11 +22,25 @@
 
 #include "../cpstd/cparena.h"
 #include "../cpstd/cpbase.h"
+#include "../cpstd/cphash.h"
 #include "../cpstd/cpmath.h"
 
 typedef enum { CPL_FILTER_LINEAR, CPL_FILTER_NEAREST } texture_filtering;
 
 // {{{ Key Inputs
+
+#define CPL_MOUSE_BUTTON_1 0
+#define CPL_MOUSE_BUTTON_2 1
+#define CPL_MOUSE_BUTTON_3 2
+#define CPL_MOUSE_BUTTON_4 3
+#define CPL_MOUSE_BUTTON_5 4
+#define CPL_MOUSE_BUTTON_6 5
+#define CPL_MOUSE_BUTTON_7 6
+#define CPL_MOUSE_BUTTON_8 7
+#define CPL_MOUSE_BUTTON_LAST CPL_MOUSE_BUTTON_8
+#define CPL_MOUSE_BUTTON_LEFT CPL_MOUSE_BUTTON_1
+#define CPL_MOUSE_BUTTON_RIGHT CPL_MOUSE_BUTTON_2
+#define CPL_MOUSE_BUTTON_MIDDLE CPL_MOUSE_BUTTON_3
 
 #define CPL_KEY_SPACE 32
 #define CPL_KEY_APOSTROPHE 39
@@ -948,6 +962,13 @@ f32 cpl_dt = 0.0f;
 f32 cpl_time_scale = 1.0f;
 i32 cpl_fps = 0;
 
+HASHMAP_DEF(i32, b8, keys)
+
+keys key_states;
+keys prev_key_states;
+keys mouse_button_states;
+keys prev_mouse_button_states;
+
 GLubyte *cpl_renderer;
 GLubyte *cpl_vendor;
 GLubyte *cpl_version;
@@ -1100,6 +1121,11 @@ void cpl_init_window(i32 width, i32 height, char *title) {
     cpl_renderer = (GLubyte *)glGetString(GL_RENDERER);
     cpl_vendor = (GLubyte *)glGetString(GL_VENDOR);
     cpl_version = (GLubyte *)glGetString(GL_VERSION);
+
+    keys_init(&key_states, GLFW_KEY_LAST);
+    keys_init(&prev_key_states, GLFW_KEY_LAST);
+    keys_init(&mouse_button_states, GLFW_MOUSE_BUTTON_LAST);
+    keys_init(&prev_mouse_button_states, GLFW_MOUSE_BUTTON_LAST);
 }
 
 b8 cpl_window_should_close() { return glfwWindowShouldClose(cpl_window); }
@@ -1124,8 +1150,10 @@ void cpl_begin_draw(cpl_draw_mode draw_mode, b8 mode_2D) {
 
     mat4f view_projection_2D;
     if (mode_2D) {
-        mat4f_mul(&cpl_projection_2D, cpl_cam_2D_get_view_mat(&cpl_cam_2D),
+        mat4f *view = cpl_cam_2D_get_view_mat(&cpl_cam_2D);
+        mat4f_mul(&cpl_projection_2D, view,
                   &view_projection_2D);
+        free(view);
     }
     cpl_shader_set_mat4f(&cpl_shaders[draw_mode], "projection",
                          mode_2D ? view_projection_2D : cpl_projection_2D);
@@ -1163,6 +1191,16 @@ void cpl_draw_line(vec2f *start, vec2f *end, f32 thickness, vec4f *color) {
 
 void cpl_draw_text(font *font, char *text, vec2f *pos, f32 scale,
                    vec4f *color) {
+    cpl_draw_text_raw(&cpl_shaders[cpl_cur_draw_mode], font, text, pos, scale,
+                      color);
+}
+
+void cpl_draw_text_shadow(font *font, char *text, vec2f *pos, f32 scale,
+                          vec4f *color, vec2f *shadow_off,
+                          vec4f *shadow_color) {
+    cpl_draw_text_raw(&cpl_shaders[cpl_cur_draw_mode], font, text,
+                      &(vec2f){pos->x + shadow_off->x, pos->y + shadow_off->y},
+                      scale, shadow_color);
     cpl_draw_text_raw(&cpl_shaders[cpl_cur_draw_mode], font, text, pos, scale,
                       color);
 }
@@ -1234,7 +1272,48 @@ void cpl_add_point_lights_2D(point_light_2D *ls, u32 size) {
 
 // }}}
 
-b8 cpl_is_key_down(i32 key) {
+void cpl_update_input() {
+    prev_key_states = key_states;
+    for (i32 key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; key++) {
+        keys_put(&key_states, key, glfwGetKey(cpl_window, key) == GLFW_PRESS);
+    }
+
+    prev_mouse_button_states = mouse_button_states;
+    for (i32 button = GLFW_MOUSE_BUTTON_1; button <= GLFW_MOUSE_BUTTON_LAST;
+         button++) {
+        keys_put(&mouse_button_states, button,
+                 glfwGetMouseButton(cpl_window, button) == GLFW_PRESS);
+    }
+}
+
+b8 cpl_is_key_down(i32 key) { return *keys_get(&key_states, key); }
+b8 cpl_is_key_up(i32 key) { return !(*keys_get(&key_states, key)); }
+b8 cpl_is_key_pressed(i32 key) {
+    return (*keys_get(&key_states, key)) && !(*keys_get(&prev_key_states, key));
+}
+b8 cpl_is_key_released(i32 key) {
+    return !(*keys_get(&key_states, key)) && (*keys_get(&prev_key_states, key));
+}
+
+b8 cpl_is_mouse_down(i32 button) {
+    return *keys_get(&mouse_button_states, button);
+}
+b8 cpl_is_mouse_pressed(i32 button) {
+    return (*keys_get(&mouse_button_states, button)) &&
+           !(*keys_get(&prev_mouse_button_states, button));
+}
+b8 cpl_is_mouse_released(i32 button) {
+    return !(*keys_get(&mouse_button_states, button)) &&
+           (*keys_get(&prev_mouse_button_states, button));
+}
+vec2f cpl_get_mouse_pos() {
+    f64 x = 0;
+    f64 y = 0;
+    glfwGetCursorPos(cpl_window, &x, &y);
+    return (vec2f){(f32)x, (f32)y};
+}
+
+b8 cpl_is_key_down_old(i32 key) {
     if (glfwGetKey(cpl_window, key) == GLFW_PRESS) {
         return true;
     }

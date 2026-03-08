@@ -84,7 +84,8 @@ endforeach()
 message(STATUS "============================================")
 
 add_executable(${CMAKE_PROJECT_NAME}
-    src/test.c
+    src/bird_anim.h
+    src/bird_gl.c
     ${SOURCE_FILES}
 )
 

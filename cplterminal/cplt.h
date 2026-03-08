@@ -5,13 +5,14 @@
 #include <pthread.h>
 
 #include <fcntl.h>
+#include <malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
-#include <malloc.h>
 
 #include "../cpstd/cpbase.h"
 
@@ -21,6 +22,7 @@ i8 *screen_buf;
 i32 *col_buf;
 i8 bg_col[22] = "\x1b[48;2;0;0;0m";
 
+bool frame_sync = true;
 bool running = true;
 
 i32 nb_frames = 0;
@@ -37,6 +39,8 @@ f32 dt = 0.0f;
 #define GREEN (rgb){0, 255, 0}
 #define BLUE (rgb){0, 0, 255}
 #define PINK (rgb){255, 0, 255}
+#define YELLOW (rgb){255, 255, 0}
+#define CYAN (rgb){0, 255, 255}
 
 typedef struct {
     u8 r, g, b;
@@ -55,6 +59,7 @@ void cplt_disable_raw_mode() {
 void cplt_activate_raw_mode() {
 #ifdef _WIN32
     fprintf(stderr, "Windows is not supported! (termios)\n");
+    exit(-1);
 #endif
 
     tcgetattr(STDIN_FILENO, &orig_termios);
@@ -81,17 +86,23 @@ void cplt_hide_cursor(bool hide) {
 }
 
 void cplt_init(i32 w, i32 h) {
-    width = w;
-    height = h;
-    screen_buf = malloc((size_t)width * height);
-    col_buf = malloc((size_t)width * height * sizeof(i32));
-    memset(screen_buf, ' ', (size_t)width * height);
-    memset(col_buf, 0, (size_t)width * height * sizeof(i32));
+    struct winsize ws;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+    width = (w > 0 && w <= ws.ws_col) ? w : ws.ws_col;
+    height = (h > 0 && h <= ws.ws_row) ? h : ws.ws_row;
 
-    printf("\x1b[2J");
+    screen_buf = malloc((u64)width * height);
+    col_buf = malloc((u64)width * height * sizeof(i32));
+    memset(screen_buf, ' ', (u64)width * height);
+    memset(col_buf, 0, (u64)width * height * sizeof(i32));
+
+    write(STDOUT_FILENO, "\x1b[?1049h", 8);
+    write(STDOUT_FILENO, "\x1b[2J", 4);
     cplt_hide_cursor(true);
     cplt_activate_raw_mode();
 }
+
+// {{{ Profiling
 
 u32 cplt_get_heap_size() {
     struct mallinfo2 mi = mallinfo2();
@@ -129,6 +140,8 @@ u32 cplt_get_stack_used() {
     return (u32)(base + size - cur);
 }
 
+// }}}
+
 f32 cplt_get_time() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -153,7 +166,7 @@ void cplt_calc_dt() {
     last_frame = curFrame;
 }
 
-bool cplt_check_collision_rects(rect *a, rect *b) {
+b8 cplt_check_collision_rects(rect *a, rect *b) {
     return (a->x + a->w >= b->x && b->x + b->w >= a->x) &&
            (a->y + a->h >= b->y && b->y + b->h >= a->y);
 }
@@ -210,6 +223,10 @@ i32 cplt_rgb_to_i32(rgb color) {
 // {{{ Drawing
 
 void cplt_render() {
+    if (frame_sync) {
+        write(STDOUT_FILENO, "\x1b[?2026h", 8);
+    }
+
     i32 lineBufSize = (width * 22) + 64;
     i8 *line = malloc((size_t)lineBufSize);
     if (!line) {
@@ -267,6 +284,10 @@ void cplt_render() {
     write(STDOUT_FILENO, out, (size_t)outPos);
     free(line);
     free(out);
+
+    if (frame_sync) {
+        write(STDOUT_FILENO, "\x1b[?2026l", 8);
+    }
 }
 
 void cplt_clear(i8 c, rgb color) {
