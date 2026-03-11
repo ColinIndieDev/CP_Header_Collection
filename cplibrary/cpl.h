@@ -14,18 +14,25 @@
 
 #include <pthread.h>
 
+#ifdef CPL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#define MINIAUDIO_IMPLEMENTATION
+#endif
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
+#include "stb_image.h"
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include <miniaudio.h>
 
 #include "../cpstd/cparena.h"
 #include "../cpstd/cpbase.h"
 #include "../cpstd/cphash.h"
 #include "../cpstd/cpmath.h"
-
-typedef enum { CPL_FILTER_LINEAR, CPL_FILTER_NEAREST } texture_filtering;
 
 // {{{ Key Inputs
 
@@ -176,9 +183,276 @@ typedef enum { CPL_FILTER_LINEAR, CPL_FILTER_NEAREST } texture_filtering;
 
 // }}}
 
-// {{{ Logging
+// {{{ Forward Declarations
+
+typedef enum { CPL_FILTER_LINEAR, CPL_FILTER_NEAREST } texture_filtering;
 
 typedef enum { LOG_INFO, LOG_WARN, LOG_ERR } log_level;
+void cpl_log(log_level level, char *message);
+
+u32 cpl_get_heap_size();
+u32 cpl_get_heap_used();
+u32 cpl_get_heap_free();
+u32 cpl_get_stack_size();
+u32 cpl_get_stack_used();
+
+typedef struct {
+    u32 id;
+} shader;
+b8 cpl_check_shader_compile_errors(u32 shader, char *type);
+char *cpl_read_shader_file(char *path);
+void cpl_create_shader(shader *s, char *vert_path, char *frag_path);
+void cpl_use_shader(shader *s);
+void cpl_shader_set_b8(shader *s, char *name, b8 val);
+void cpl_shader_set_i32(shader *s, char *name, i32 val);
+void cpl_shader_set_f32(shader *s, char *name, f32 val);
+void cpl_shader_set_rgba(shader *s, char *name, vec4f *c);
+void cpl_shader_set_mat4f(shader *s, char *name, mat4f mat);
+void cpl_shader_set_vec2f(shader *s, char *name, vec2f *v);
+void cpl_shader_set_vec3f(shader *s, char *name, vec3f *v);
+
+typedef struct {
+    vec2f pos;
+    vec2f size;
+    vec4f color;
+    f32 rot;
+
+    u32 vbo, vao, ebo;
+} rect;
+void cpl_create_rect(rect *r, vec2f *pos, vec2f *size, vec4f *color, f32 rot);
+void cpl_destroy_rect(rect *r);
+void cpl_draw_rect_raw(shader *s, rect *r);
+
+typedef struct {
+    vec2f pos;
+    vec2f size;
+    vec4f color;
+    f32 rot;
+
+    u32 vbo, vao;
+} triangle;
+void cpl_create_triangle(triangle *t, vec2f *pos, vec2f *size, vec4f *color,
+                         f32 rot);
+void cpl_destroy_triangle(triangle *t);
+void cpl_draw_triangle_raw(shader *s, triangle *t);
+
+typedef struct {
+    vec2f pos;
+    f32 radius;
+    vec4f color;
+
+    u32 vao, vbo;
+    i32 vertex_cnt;
+} circle;
+void cpl_create_circle(circle *c, vec2f *pos, f32 radius, vec4f *color);
+void cpl_destroy_circle(circle *c);
+void cpl_draw_circle_raw(shader *s, circle *c);
+
+typedef struct {
+    vec2f start, end;
+    vec4f color;
+
+    u32 vao, vbo;
+} line;
+void cpl_create_line(line *l, vec2f *start, vec2f *end, vec4f *color);
+void cpl_destroy_line(line *l);
+void cpl_draw_line_raw(shader *s, line *l);
+
+typedef struct {
+    u32 id;
+    vec2f size;
+    vec2f bearing;
+    u32 advance;
+} letter;
+VEC_DEF(letter, vec_letters)
+typedef struct {
+    u32 vao, vbo;
+    char *name;
+    vec_letters letters;
+} font;
+void cpl_create_font(font *f, char *path, char *name, texture_filtering filter);
+void cpl_delete_font(font *f);
+void cpl_draw_text_raw(shader *s, font *f, char *text, vec2f *pos, f32 scale,
+                       vec4f *color);
+vec2f cpl_get_text_size(font *f, char *text, f32 scale);
+
+typedef struct {
+    u32 id;
+    vec2f size;
+} texture;
+void cpl_load_texture(texture *t, char *path, texture_filtering filter);
+void cpl_unload_texture(texture *t);
+typedef struct {
+    vec2f pos;
+    vec2f size;
+    f32 rot;
+    vec4f color;
+    texture *tex;
+
+    u32 vbo, vao, ebo;
+} texture2D;
+void cpl_create_texture2D(texture2D *t, vec2f *pos, vec2f *size, f32 rot,
+                          vec4f *color, texture *tex);
+void cpl_destroy_texture2D(texture2D *t);
+void cpl_draw_texture2D_raw(shader *s, texture2D *t);
+
+typedef struct {
+    vec2f pos;
+    f32 radius;
+    f32 intensity;
+    vec4f color;
+} point_light_2D;
+typedef struct {
+    f32 intensity;
+    vec4f color;
+} global_light_2D;
+
+typedef struct {
+    vec2f pos;
+    f32 zoom;
+    f32 rot;
+} cam_2D;
+
+typedef struct {
+    char *path;
+    f32 volume;
+    f32 pitch;
+} audio;
+
+void cpl_audio_init();
+audio cpl_load_audio(char *path);
+void cpl_audio_update();
+void cpl_audio_play_sound(audio *a);
+void cpl_audio_play_music(audio *a);
+void cpl_audio_pause_music();
+void cpl_audio_resume_music();
+void cpl_audio_stop_music();
+void cpl_audio_close();
+
+// {{{ Variables
+
+ma_engine cpl_audio_engine;
+ma_sound *cpl_music;
+ma_sound **cpl_active_sounds;
+u32 cpl_active_sounds_size;
+u32 cpl_active_sounds_cap;
+
+f32 cpl_screen_width = 0.0f;
+f32 cpl_screen_height = 0.0f;
+
+GLFWwindow *cpl_window = NULL;
+
+mat4f cpl_projection_2D;
+
+typedef enum {
+    CPL_SHAPE_2D_UNLIT,
+    CPL_SHAPE_2D_LIT,
+    CPL_TEXT,
+    CPL_TEXTURE_2D_UNLIT,
+    CPL_DRAW_MODES_COUNT
+} cpl_draw_mode;
+
+cpl_draw_mode cpl_cur_draw_mode;
+
+shader cpl_shaders[CPL_DRAW_MODES_COUNT];
+
+i32 cpl_nb_frames = 0;
+f32 cpl_last_time = 0.0f;
+f32 cpl_last_frame = 0.0f;
+f32 cpl_dt = 0.0f;
+f32 cpl_time_scale = 1.0f;
+i32 cpl_fps = 0;
+
+b8 key_states[CPL_KEY_LAST - CPL_KEY_SPACE + 1];
+b8 prev_key_states[CPL_KEY_LAST - CPL_KEY_SPACE + 1];
+b8 mouse_button_states[CPL_MOUSE_BUTTON_LAST + 1];
+b8 prev_mouse_button_states[CPL_MOUSE_BUTTON_LAST + 1];
+
+GLubyte *cpl_renderer;
+GLubyte *cpl_vendor;
+GLubyte *cpl_version;
+
+cam_2D cpl_cam_2D;
+
+mat4f *cpl_cam_2D_get_view_mat(cam_2D *cam);
+
+// }}}
+
+typedef struct {
+    vec2f pos;
+    vec2f size;
+} rect_collider;
+typedef struct {
+    vec2f pos;
+    vec2f size;
+} triangle_collider;
+typedef struct {
+    vec2f pos;
+    f32 radius;
+} circle_collider;
+b8 cpl_check_collision_rects(rect_collider *a, rect_collider *b);
+b8 cpl_check_collision_circle_rect(circle_collider *a, rect_collider *b);
+b8 cpl_check_collision_vec2f_rect(vec2f *a, rect_collider *b);
+b8 cpl_check_collision_circles(circle_collider *a, circle_collider *b);
+b8 cpl_check_collision_vec2f_circle(vec2f *a, circle_collider *b);
+
+void cpl_framebuffer_size_callback(GLFWwindow *window, i32 width, i32 height);
+void cpl_init_shaders();
+void cpl_init_window(i32 width, i32 height, char *title);
+b8 cpl_window_should_close();
+void cpl_destroy_window();
+void cpl_close_window();
+
+void cpl_clear_background(vec4f *color);
+void cpl_begin_draw(cpl_draw_mode draw_mode, b8 mode_2D);
+void cpl_draw_rect(vec2f *pos, vec2f *size, vec4f *color, f32 rot);
+void cpl_draw_triangle(vec2f *pos, vec2f *size, vec4f *color, f32 rot);
+void cpl_draw_circle(vec2f *pos, f32 radius, vec4f *color);
+void cpl_draw_line(vec2f *start, vec2f *end, f32 thickness, vec4f *color);
+void cpl_draw_text(font *font, char *text, vec2f *pos, f32 scale, vec4f *color);
+void cpl_draw_text_shadow(font *font, char *text, vec2f *pos, f32 scale,
+                          vec4f *color, vec2f *shadow_off, vec4f *shadow_color);
+void cpl_draw_texture2D(texture *tex, vec2f *pos, vec2f *size, vec4f *color,
+                        f32 rot);
+
+void cpl_reset_shader();
+
+void cpl_set_ambient_light_2D(f32 strength);
+void cpl_set_global_light_2D(global_light_2D *l);
+void cpl_add_point_lights_2D(point_light_2D *ls, u32 size);
+
+void cpl_update_input();
+b8 cpl_is_key_down(i32 key);
+b8 cpl_is_key_up(i32 key);
+b8 cpl_is_key_pressed(i32 key);
+b8 cpl_is_key_released(i32 key);
+b8 cpl_is_mouse_down(i32 button);
+b8 cpl_is_mouse_pressed(i32 button);
+b8 cpl_is_mouse_released(i32 button);
+vec2f cpl_get_mouse_pos();
+b8 cpl_is_key_down_old(i32 key);
+
+void cpl_calc_fps();
+i32 cpl_get_fps();
+void cpl_calc_dt();
+f32 cpl_get_dt();
+f32 cpl_get_time();
+f32 cpl_get_time_scale();
+void cpl_set_time_scale(f32 scale);
+
+f32 cpl_get_screen_width();
+f32 cpl_get_screen_height();
+void cpl_enable_vsync(b8 enabled);
+void cpl_update();
+void cpl_end_frame();
+void cpl_display_details(font *font);
+
+// }}}
+
+#define CPL_IMPLEMENTATION
+#ifdef CPL_IMPLEMENTATION
+
+// {{{ Logging
 
 void cpl_log(log_level level, char *message) {
     switch (level) {
@@ -199,30 +473,47 @@ void cpl_log(log_level level, char *message) {
 // {{{ Profiler
 
 u32 cpl_get_heap_size() {
+#ifndef __EMSCRIPTEN__
     struct mallinfo2 mi = mallinfo2();
     return mi.arena;
+#else
+    return 0;
+#endif
 }
 
 u32 cpl_get_heap_used() {
+#ifndef __EMSCRIPTEN__
     struct mallinfo2 mi = mallinfo2();
     return mi.uordblks;
+#else
+    return 0;
+#endif
 }
 
 u32 cpl_get_heap_free() {
+#ifndef __EMSCRIPTEN__
     struct mallinfo2 mi = mallinfo2();
     return mi.fordblks;
+#else
+    return 0;
+#endif
 }
 
 u32 cpl_get_stack_size() {
+#ifndef __EMSCRIPTEN__
     pthread_attr_t attr;
     pthread_getattr_np(pthread_self(), &attr);
     size_t size = 0;
     pthread_attr_getstacksize(&attr, &size);
     pthread_attr_destroy(&attr);
     return size;
+#else
+    return 0;
+#endif
 }
 
 u32 cpl_get_stack_used() {
+#ifndef __EMSCRIPTEN__
     pthread_attr_t attr;
     pthread_getattr_np(pthread_self(), &attr);
     void *base = NULL;
@@ -232,15 +523,14 @@ u32 cpl_get_stack_used() {
     char marker;
     void *cur = &marker;
     return (u32)(base + size - cur);
+#else
+    return 0;
+#endif
 }
 
 // }}}
 
 // {{{ Shader
-
-typedef struct {
-    u32 id;
-} shader;
 
 b8 cpl_check_shader_compile_errors(u32 shader, char *type) {
     i32 success = 0;
@@ -356,15 +646,6 @@ void cpl_shader_set_vec3f(shader *s, char *name, vec3f *v) {
 
 // {{{ Rectangle
 
-typedef struct {
-    vec2f pos;
-    vec2f size;
-    vec4f color;
-    f32 rot;
-
-    u32 vbo, vao, ebo;
-} rect;
-
 void cpl_create_rect(rect *r, vec2f *pos, vec2f *size, vec4f *color, f32 rot) {
     r->pos = *pos;
     r->size = *size;
@@ -429,15 +710,6 @@ void cpl_draw_rect_raw(shader *s, rect *r) {
 
 // {{{ Triangle
 
-typedef struct {
-    vec2f pos;
-    vec2f size;
-    vec4f color;
-    f32 rot;
-
-    u32 vbo, vao;
-} triangle;
-
 void cpl_create_triangle(triangle *t, vec2f *pos, vec2f *size, vec4f *color,
                          f32 rot) {
     t->pos = *pos;
@@ -493,15 +765,6 @@ void cpl_draw_triangle_raw(shader *s, triangle *t) {
 // }}}
 
 // {{{ Circle
-
-typedef struct {
-    vec2f pos;
-    f32 radius;
-    vec4f color;
-
-    u32 vao, vbo;
-    i32 vertex_cnt;
-} circle;
 
 void cpl_create_circle(circle *c, vec2f *pos, f32 radius, vec4f *color) {
     c->pos = *pos;
@@ -565,13 +828,6 @@ void cpl_draw_circle_raw(shader *s, circle *c) {
 
 // {{{ Line
 
-typedef struct {
-    vec2f start, end;
-    vec4f color;
-
-    u32 vao, vbo;
-} line;
-
 void cpl_create_line(line *l, vec2f *start, vec2f *end, vec4f *color) {
     l->start = *start;
     l->end = *end;
@@ -618,21 +874,6 @@ void cpl_draw_line_raw(shader *s, line *l) {
 // }}}
 
 // {{{ Text
-
-typedef struct {
-    u32 id;
-    vec2f size;
-    vec2f bearing;
-    u32 advance;
-} letter;
-
-VEC_DEF(letter, vec_letters)
-
-typedef struct {
-    u32 vao, vbo;
-    char *name;
-    vec_letters letters;
-} font;
 
 void cpl_create_font(font *f, char *path, char *name,
                      texture_filtering filter) {
@@ -782,11 +1023,6 @@ vec2f cpl_get_text_size(font *f, char *text, f32 scale) {
 
 // {{{ Texture & Texture2D
 
-typedef struct {
-    u32 id;
-    vec2f size;
-} texture;
-
 void cpl_load_texture(texture *t, char *path, texture_filtering filter) {
     glGenTextures(1, &t->id);
     glBindTexture(GL_TEXTURE_2D, t->id);
@@ -826,16 +1062,6 @@ void cpl_unload_texture(texture *t) {
         glDeleteTextures(1, &t->id);
     }
 }
-
-typedef struct {
-    vec2f pos;
-    vec2f size;
-    f32 rot;
-    vec4f color;
-    texture *tex;
-
-    u32 vbo, vao, ebo;
-} texture2D;
 
 void cpl_create_texture2D(texture2D *t, vec2f *pos, vec2f *size, f32 rot,
                           vec4f *color, texture *tex) {
@@ -914,70 +1140,115 @@ void cpl_draw_texture2D_raw(shader *s, texture2D *t) {
 
 // }}}
 
-// {{{ Lights 2D
+// {{{ Audio
 
-typedef struct {
-    vec2f pos;
-    f32 radius;
-    f32 intensity;
-    vec4f color;
-} point_light_2D;
+void cpl_audio_init() {
+    if (ma_engine_init(NULL, &cpl_audio_engine) != MA_SUCCESS) {
+        cpl_log(LOG_ERR, "Failed to init audio!");
+        exit(-1);
+    }
+    cpl_active_sounds_cap = 16;
+    cpl_active_sounds_size = 0;
+    cpl_active_sounds = malloc(cpl_active_sounds_cap * sizeof(ma_sound *));
+    cpl_music = NULL;
+}
 
-typedef struct {
-    f32 intensity;
-    vec4f color;
-} global_light_2D;
+audio cpl_load_audio(char *path) { return (audio){path, 1.0f, 1.0f}; }
+
+void cpl_audio_update() {
+    u32 w = 0;
+    for (u32 i = 0; i < cpl_active_sounds_size; i++) {
+        if (ma_sound_is_playing(cpl_active_sounds[i])) {
+            cpl_active_sounds[w++] = cpl_active_sounds[i];
+        } else {
+            ma_sound_uninit(cpl_active_sounds[i]);
+            free(cpl_active_sounds[i]);
+        }
+    }
+    cpl_active_sounds_size = w;
+}
+
+void cpl_audio_play_sound(audio *a) {
+    ma_sound *sound = malloc(sizeof(ma_sound));
+    if (ma_sound_init_from_file(&cpl_audio_engine, a->path,
+                                MA_SOUND_FLAG_DECODE, NULL, NULL,
+                                sound) != MA_SUCCESS) {
+        cpl_log(LOG_ERR, "Failed to init sound!");
+        free(sound);
+        return;
+    }
+    ma_sound_set_pitch(sound, a->pitch);
+    ma_sound_set_volume(sound, a->volume);
+    ma_sound_set_looping(sound, MA_FALSE);
+    ma_sound_start(sound);
+
+    if (cpl_active_sounds_size >= cpl_active_sounds_cap) {
+        cpl_active_sounds_cap *= 2;
+        ma_sound **tmp = realloc(cpl_active_sounds,
+                                 cpl_active_sounds_cap * sizeof(ma_sound *));
+        if (!tmp) {
+            cpl_log(LOG_ERR, "realloc failed!");
+            return;
+        }
+        cpl_active_sounds = tmp;
+    }
+    cpl_active_sounds[cpl_active_sounds_size++] = sound;
+}
+
+void cpl_audio_play_music(audio *a) {
+    if (cpl_music != NULL) {
+        ma_sound_stop(cpl_music);
+        ma_sound_uninit(cpl_music);
+        free(cpl_music);
+        cpl_music = NULL;
+    }
+    cpl_music = malloc(sizeof(ma_sound));
+    if (ma_sound_init_from_file(&cpl_audio_engine, a->path,
+                                MA_SOUND_FLAG_DECODE, NULL, NULL,
+                                cpl_music) != MA_SUCCESS) {
+        cpl_log(LOG_ERR, "Failed to load music!");
+        free(cpl_music);
+        cpl_music = NULL;
+        return;
+    }
+    ma_sound_set_pitch(cpl_music, a->pitch);
+    ma_sound_set_looping(cpl_music, MA_TRUE);
+    ma_sound_start(cpl_music);
+}
+
+void cpl_audio_pause_music() {
+    if (cpl_music != NULL) {
+        ma_sound_stop(cpl_music);
+    }
+}
+
+void cpl_audio_resume_music() {
+    if (cpl_music != NULL) {
+        ma_sound_start(cpl_music);
+    }
+}
+
+void cpl_audio_stop_music() {
+    if (cpl_music != NULL) {
+        ma_sound_stop(cpl_music);
+        ma_sound_seek_to_pcm_frame(cpl_music, 0);
+    }
+}
+
+void cpl_audio_close() {
+    cpl_audio_update();
+    free(cpl_active_sounds);
+    if (cpl_music) {
+        ma_sound_stop(cpl_music);
+        ma_sound_uninit(cpl_music);
+        free(cpl_music);
+    }
+    ma_engine_uninit(&cpl_audio_engine);
+}
 
 // }}}
 
 // {{{ General
-
-// {{{ Variables
-
-f32 cpl_screen_width = 0.0f;
-f32 cpl_screen_height = 0.0f;
-
-GLFWwindow *cpl_window = NULL;
-
-mat4f cpl_projection_2D;
-
-typedef enum {
-    CPL_SHAPE_2D_UNLIT,
-    CPL_SHAPE_2D_LIT,
-    CPL_TEXT,
-    CPL_TEXTURE_2D_UNLIT,
-    CPL_DRAW_MODES_COUNT
-} cpl_draw_mode;
-
-cpl_draw_mode cpl_cur_draw_mode;
-
-shader cpl_shaders[CPL_DRAW_MODES_COUNT];
-
-i32 cpl_nb_frames = 0;
-f32 cpl_last_time = 0.0f;
-f32 cpl_last_frame = 0.0f;
-f32 cpl_dt = 0.0f;
-f32 cpl_time_scale = 1.0f;
-i32 cpl_fps = 0;
-
-HASHMAP_DEF(i32, b8, keys)
-
-keys key_states;
-keys prev_key_states;
-keys mouse_button_states;
-keys prev_mouse_button_states;
-
-GLubyte *cpl_renderer;
-GLubyte *cpl_vendor;
-GLubyte *cpl_version;
-
-typedef struct {
-    vec2f pos;
-    f32 zoom;
-    f32 rot;
-} cam_2D;
-
-cam_2D cpl_cam_2D;
 
 mat4f *cpl_cam_2D_get_view_mat(cam_2D *cam) {
     mat4f *view = malloc(sizeof(mat4f));
@@ -996,24 +1267,7 @@ mat4f *cpl_cam_2D_get_view_mat(cam_2D *cam) {
     return view;
 }
 
-// }}}
-
 // {{{ Collisions
-
-typedef struct {
-    vec2f pos;
-    vec2f size;
-} rect_collider;
-
-typedef struct {
-    vec2f pos;
-    vec2f size;
-} triangle_collider;
-
-typedef struct {
-    vec2f pos;
-    f32 radius;
-} circle_collider;
 
 b8 cpl_check_collision_rects(rect_collider *a, rect_collider *b) {
     b8 collision_x =
@@ -1069,6 +1323,7 @@ void cpl_framebuffer_size_callback(GLFWwindow *window, i32 width, i32 height) {
 }
 
 void cpl_init_shaders() {
+#ifndef __EMSCRIPTEN__
     cpl_create_shader(&cpl_shaders[CPL_SHAPE_2D_UNLIT],
                       "shaders/vert/2D/shape.vert",
                       "shaders/frag/2D/shape_unlit.frag");
@@ -1080,13 +1335,38 @@ void cpl_init_shaders() {
     cpl_create_shader(&cpl_shaders[CPL_TEXTURE_2D_UNLIT],
                       "shaders/vert/2D/texture.vert",
                       "shaders/frag/2D/texture.frag");
+#else
+    cpl_create_shader(&cpl_shaders[CPL_SHAPE_2D_UNLIT],
+                      "/shaders/vert/2D/shape_w.vert",
+                      "/shaders/frag/2D/shape_unlit_w.frag");
+    cpl_create_shader(&cpl_shaders[CPL_SHAPE_2D_LIT],
+                      "/shaders/vert/2D/shape_w.vert",
+                      "/shaders/frag/2D/shape_lit_w.frag");
+    cpl_create_shader(&cpl_shaders[CPL_TEXT], "/shaders/vert/2D/text_w.vert",
+                      "/shaders/frag/2D/text_w.frag");
+    cpl_create_shader(&cpl_shaders[CPL_TEXTURE_2D_UNLIT],
+                      "/shaders/vert/2D/texture_w.vert",
+                      "/shaders/frag/2D/texture_w.frag");
+#endif
 }
+
 void cpl_init_window(i32 width, i32 height, char *title) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, 0);
+
+#ifdef __EMSCRIPTEN__
+    double browser_w, browser_h;
+    emscripten_get_element_css_size("#canvas", &browser_w, &browser_h);
+    width = (i32)browser_w;
+    height = (i32)browser_h;
+    if (width <= 0)
+        width = emscripten_run_script_int("window.innerWidth");
+    if (height <= 0)
+        height = emscripten_run_script_int("window.innerHeight");
+#endif
 
     cpl_screen_width = (f32)width;
     cpl_screen_height = (f32)height;
@@ -1119,11 +1399,6 @@ void cpl_init_window(i32 width, i32 height, char *title) {
     cpl_renderer = (GLubyte *)glGetString(GL_RENDERER);
     cpl_vendor = (GLubyte *)glGetString(GL_VENDOR);
     cpl_version = (GLubyte *)glGetString(GL_VERSION);
-
-    keys_init(&key_states, GLFW_KEY_LAST);
-    keys_init(&prev_key_states, GLFW_KEY_LAST);
-    keys_init(&mouse_button_states, GLFW_MOUSE_BUTTON_LAST);
-    keys_init(&prev_mouse_button_states, GLFW_MOUSE_BUTTON_LAST);
 }
 
 b8 cpl_window_should_close() { return glfwWindowShouldClose(cpl_window); }
@@ -1269,39 +1544,41 @@ void cpl_add_point_lights_2D(point_light_2D *ls, u32 size) {
 
 // }}}
 
+// {{{ Inputs
+
 void cpl_update_input() {
-    prev_key_states = key_states;
-    for (i32 key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; key++) {
-        keys_put(&key_states, key, glfwGetKey(cpl_window, key) == GLFW_PRESS);
+    for (u32 i = 0; i < CPL_KEY_LAST - CPL_KEY_SPACE; i++) {
+        prev_key_states[i] = key_states[i];
+    }
+    for (u32 key = CPL_KEY_SPACE; key <= CPL_KEY_LAST; key++) {
+        key_states[key] = glfwGetKey(cpl_window, (i32)key) == GLFW_PRESS;
     }
 
-    prev_mouse_button_states = mouse_button_states;
-    for (i32 button = GLFW_MOUSE_BUTTON_1; button <= GLFW_MOUSE_BUTTON_LAST;
+    for (u32 i = 0; i < CPL_MOUSE_BUTTON_LAST - CPL_MOUSE_BUTTON_1; i++) {
+        prev_mouse_button_states[i] = mouse_button_states[i];
+    }
+    for (u32 button = CPL_MOUSE_BUTTON_1; button <= CPL_MOUSE_BUTTON_LAST;
          button++) {
-        keys_put(&mouse_button_states, button,
-                 glfwGetMouseButton(cpl_window, button) == GLFW_PRESS);
+        mouse_button_states[button] =
+            glfwGetMouseButton(cpl_window, (i32)button) == GLFW_PRESS;
     }
 }
 
-b8 cpl_is_key_down(i32 key) { return *keys_get(&key_states, key); }
-b8 cpl_is_key_up(i32 key) { return !(*keys_get(&key_states, key)); }
+b8 cpl_is_key_down(i32 key) { return key_states[key]; }
+b8 cpl_is_key_up(i32 key) { return !key_states[key]; }
 b8 cpl_is_key_pressed(i32 key) {
-    return (*keys_get(&key_states, key)) && !(*keys_get(&prev_key_states, key));
+    return key_states[key] && !prev_key_states[key];
 }
 b8 cpl_is_key_released(i32 key) {
-    return !(*keys_get(&key_states, key)) && (*keys_get(&prev_key_states, key));
+    return !key_states[key] && prev_key_states[key];
 }
 
-b8 cpl_is_mouse_down(i32 button) {
-    return *keys_get(&mouse_button_states, button);
-}
+b8 cpl_is_mouse_down(i32 button) { return mouse_button_states[button]; }
 b8 cpl_is_mouse_pressed(i32 button) {
-    return (*keys_get(&mouse_button_states, button)) &&
-           !(*keys_get(&prev_mouse_button_states, button));
+    return mouse_button_states[button] && !prev_mouse_button_states[button];
 }
 b8 cpl_is_mouse_released(i32 button) {
-    return !(*keys_get(&mouse_button_states, button)) &&
-           (*keys_get(&prev_mouse_button_states, button));
+    return !mouse_button_states[button] && prev_mouse_button_states[button];
 }
 vec2f cpl_get_mouse_pos() {
     f64 x = 0;
@@ -1316,6 +1593,8 @@ b8 cpl_is_key_down_old(i32 key) {
     }
     return false;
 }
+
+// }}}
 
 // {{{ Timing
 
@@ -1340,12 +1619,12 @@ f32 cpl_get_dt() { return cpl_dt; }
 f32 cpl_get_time() { return (f32)glfwGetTime(); }
 f32 cpl_get_time_scale() { return cpl_time_scale; }
 
-f32 cpl_get_screen_width() { return cpl_screen_width; }
-f32 cpl_get_screen_height() { return cpl_screen_height; }
-
 void cpl_set_time_scale(f32 scale) { cpl_time_scale = scale; }
 
 // }}}
+
+f32 cpl_get_screen_width() { return cpl_screen_width; }
+f32 cpl_get_screen_height() { return cpl_screen_height; }
 
 void cpl_enable_vsync(b8 enabled) { glfwSwapInterval(enabled); }
 
@@ -1406,3 +1685,5 @@ void cpl_display_details(font *font) {
 }
 
 // }}}
+
+#endif

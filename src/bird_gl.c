@@ -1,5 +1,11 @@
+#define CPL_IMPLEMENTATION
+
 #include "../cplibrary/cpl.h"
 #include "../cpstd/cprng.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
 
 // {{{ Start animation
 
@@ -75,6 +81,11 @@ texture bird_tex;
 texture pipe_tex;
 font default_font;
 
+audio damage_sound;
+audio fly_sound;
+audio restart_sound;
+audio music;
+
 b8 game_over = false;
 b8 restarting = false;
 b8 spawn_pipes = false;
@@ -97,6 +108,9 @@ bird player = {.vel = 100.0f,
                .gravity = 200.0f,
                .jmp_force = 150.0f};
 bg background;
+
+f32 tex_width = 800.0f * 1.5f;
+f32 tex_height = 600.0f * 1.5f;
 
 // }}}
 
@@ -157,19 +171,20 @@ void remove_pipe() {
 // {{{ Background
 
 void bg_init(bg *b) {
-    positions_reserve(&b->sky_positions, 2);
-    positions_reserve(&b->building_positions, 2);
-    positions_reserve(&b->forest_positions, 2);
+    positions_reserve(&b->sky_positions, 3);
+    positions_reserve(&b->building_positions, 3);
+    positions_reserve(&b->forest_positions, 3);
 
     positions_push_back(&b->sky_positions, (vec2f){0.0f, 0.0f});
-    positions_push_back(&b->sky_positions,
-                        (vec2f){cpl_get_screen_width(), 0.0f});
+    positions_push_back(&b->sky_positions, (vec2f){tex_width, 0.0f});
+    positions_push_back(&b->sky_positions, (vec2f){tex_width * 2.0f, 0.0f});
     positions_push_back(&b->building_positions, (vec2f){0.0f, 0.0f});
+    positions_push_back(&b->building_positions, (vec2f){tex_width, 0.0f});
     positions_push_back(&b->building_positions,
-                        (vec2f){cpl_get_screen_width(), 0.0f});
+                        (vec2f){tex_width * 2.0f, 0.0f});
     positions_push_back(&b->forest_positions, (vec2f){0.0f, 0.0f});
-    positions_push_back(&b->forest_positions,
-                        (vec2f){cpl_get_screen_width(), 0.0f});
+    positions_push_back(&b->forest_positions, (vec2f){tex_width, 0.0f});
+    positions_push_back(&b->forest_positions, (vec2f){tex_width * 2.0f, 0.0f});
 }
 void bg_update(bg *b) {
     FOREACH_VEC(vec2f, positions, pos, &b->sky_positions) {
@@ -183,27 +198,25 @@ void bg_update(bg *b) {
     }
 
     if (!positions_empty(&b->sky_positions) &&
-        positions_front(&b->sky_positions)->x + cpl_get_screen_width() <= 0) {
+        positions_front(&b->sky_positions)->x + tex_width <= 0) {
         f32 right_x = positions_back(&b->sky_positions)->x;
         positions_pop_front(&b->sky_positions);
         positions_push_back(&b->sky_positions,
-                            (vec2f){right_x + cpl_get_screen_width(), 0.0f});
+                            (vec2f){right_x + (tex_width * 2.0f), 0.0f});
     }
     if (!positions_empty(&b->building_positions) &&
-        positions_front(&b->building_positions)->x + cpl_get_screen_width() <=
-            0) {
+        positions_front(&b->building_positions)->x + tex_width <= 0) {
         f32 right_x = positions_back(&b->building_positions)->x;
         positions_pop_front(&b->building_positions);
         positions_push_back(&b->building_positions,
-                            (vec2f){right_x + cpl_get_screen_width(), 0.0f});
+                            (vec2f){right_x + (tex_width * 2.0f), 0.0f});
     }
     if (!positions_empty(&b->forest_positions) &&
-        positions_front(&b->forest_positions)->x + cpl_get_screen_width() <=
-            0) {
+        positions_front(&b->forest_positions)->x + tex_width <= 0) {
         f32 right_x = positions_back(&b->forest_positions)->x;
         positions_pop_front(&b->forest_positions);
         positions_push_back(&b->forest_positions,
-                            (vec2f){right_x + cpl_get_screen_width(), 0.0f});
+                            (vec2f){right_x + (tex_width * 2.0f), 0.0f});
     }
 }
 
@@ -314,20 +327,39 @@ void game_init();
 void game_update();
 void game_render();
 
+void main_loop() {
+#ifdef __EMSCRIPTEN__
+    i32 w = emscripten_run_script_int("window.innerWidth");
+    i32 h = emscripten_run_script_int("window.innerHeight");
+    if ((f32)w != cpl_screen_width || (f32)h != cpl_screen_height) {
+        glfwSetWindowSize(cpl_window, w, h);
+    }
+#endif
+    cpl_update();
+    if (!fading) {
+        handle_input();
+    }
+    handle_collisions();
+    game_update();
+    game_render();
+}
+
 int main() {
     cpl_init_window(800, 600, "Flappy Bird Clone");
+    cpl_audio_init();
     game_init();
     start_anim_init();
+    cpl_audio_play_music(&music);
+
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop(main_loop, 0, true);
+#else
     while (!cpl_window_should_close()) {
-        cpl_update();
-        if (!fading) {
-            handle_input();
-        }
-        handle_collisions();
-        game_update();
-        game_render();
+        main_loop();
     }
     save_highscore();
+#endif
+    cpl_audio_close();
     cpl_close_window();
 }
 
@@ -335,7 +367,9 @@ int main() {
 
 void game_init() {
     pipe_clock = cpl_get_time();
+#ifndef __EMSCRIPTEN__
     read_highscore();
+#endif
     green_pipes_reserve(&pipes, 100);
     player.pos =
         (vec2f){cpl_get_screen_width() / 2.0f, cpl_get_screen_height() / 2.0f};
@@ -348,6 +382,11 @@ void game_init() {
     cpl_load_texture(&pipe_tex, "assets/images/pipe.png", CPL_FILTER_LINEAR);
     cpl_create_font(&default_font, "assets/fonts/default.ttf", "default",
                     CPL_FILTER_NEAREST);
+
+    damage_sound = cpl_load_audio("assets/sounds/damage.wav");
+    fly_sound = cpl_load_audio("assets/sounds/jump.mp3");
+    restart_sound = cpl_load_audio("assets/sounds/restart.mp3");
+    music = cpl_load_audio("assets/sounds/music.mp3");
 }
 
 // }}}
@@ -357,17 +396,20 @@ void game_init() {
 void game_update() {
     update_highscore();
 
-    if (!game_over) {
+    player.pos.x = cpl_get_screen_width() / 2.0f;
+    if (!player.falling) {
+        player.pos.y = cpl_get_screen_height() / 2.0f;
+    }
+
+    if (game_over) {
+        bird_game_over_anim(&player);
+        cpl_audio_stop_music();
+    } else {
         bg_update(&background);
+        cpl_audio_resume_music();
     }
     if (player.falling && !game_over) {
         bird_update(&player);
-    }
-    if (game_over) {
-        bird_game_over_anim(&player);
-    }
-
-    if (player.falling && !game_over) {
         if (pipe_clock + pipe_cooldown < cpl_get_time()) {
             spawn_pipe();
             pipe_clock = cpl_get_time();
@@ -393,6 +435,9 @@ void handle_collisions() {
                                             &upper_pipe_collider) ||
             cpl_check_collision_circle_rect(&player_collider,
                                             &lower_pipe_collider)) {
+            if (!game_over) {
+                cpl_audio_play_sound(&damage_sound);
+            }
             game_over = true;
         }
     }
@@ -402,6 +447,7 @@ void handle_collisions() {
         player.pos.y = 0.0f;
     } else if (!game_over && player.pos.y - (bird_tex.size.y / 4.0f) >=
                                  cpl_get_screen_height()) {
+        cpl_audio_play_sound(&damage_sound);
         game_over = true;
     }
 }
@@ -410,13 +456,15 @@ void handle_input() {
     if (cpl_is_key_down(CPL_KEY_ESCAPE)) {
         cpl_destroy_window();
     }
-    if (cpl_is_mouse_down(CPL_MOUSE_BUTTON_LEFT) && !game_over) {
+    if (cpl_is_mouse_pressed(CPL_MOUSE_BUTTON_LEFT) && !game_over) {
         if (!player.falling) {
             player.falling = true;
         }
         player.vel = -player.jmp_force;
+        cpl_audio_play_sound(&fly_sound);
     }
     if (cpl_is_mouse_down(CPL_MOUSE_BUTTON_LEFT) && game_over && !restarting) {
+        cpl_audio_play_sound(&restart_sound);
         if (!restarting) {
             restarting = true;
             alpha = 0.0f;
@@ -430,19 +478,18 @@ void handle_input() {
 // {{{ Rendering
 
 void game_render() {
-    cpl_clear_background(&BLACK);
+    cpl_clear_background(&(vec4f){132.0f, 226.0f, 138.0f, 255.0f});
     cpl_begin_draw(CPL_TEXTURE_2D_UNLIT, false);
 
-    vec2f screen_size = {.x = cpl_get_screen_width(),
-                         .y = cpl_get_screen_height()};
+    vec2f tex_size = {.x = tex_width, .y = tex_height};
     FOREACH_VEC(vec2f, positions, p, &background.sky_positions) {
-        cpl_draw_texture2D(&sky_tex, p, &screen_size, &WHITE, 0.0f);
+        cpl_draw_texture2D(&sky_tex, p, &tex_size, &WHITE, 0.0f);
     }
     FOREACH_VEC(vec2f, positions, p, &background.building_positions) {
-        cpl_draw_texture2D(&building_tex, p, &screen_size, &WHITE, 0.0f);
+        cpl_draw_texture2D(&building_tex, p, &tex_size, &WHITE, 0.0f);
     }
     FOREACH_VEC(vec2f, positions, p, &background.forest_positions) {
-        cpl_draw_texture2D(&forest_tex, p, &screen_size, &WHITE, 0.0f);
+        cpl_draw_texture2D(&forest_tex, p, &tex_size, &WHITE, 0.0f);
     }
 
     FOREACH_VEC(green_pipe, green_pipes, p, &pipes) {

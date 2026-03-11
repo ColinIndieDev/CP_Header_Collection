@@ -79,6 +79,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(freetype)
 
+# Miniaudio
+set(MINIAUDIO_PATH "${CMAKE_BINARY_DIR}/_deps/miniaudio/miniaudio.h")
+file(DOWNLOAD
+        https://raw.githubusercontent.com/mackron/miniaudio/master/miniaudio.h
+        ${MINIAUDIO_PATH}
+        SHOW_PROGRESS
+)
+add_library(miniaudio INTERFACE)
+target_include_directories(miniaudio INTERFACE "${CMAKE_BINARY_DIR}/_deps/miniaudio")
+
 # GLAD
 add_subdirectory(external/glad)
 
@@ -105,11 +115,15 @@ add_executable(${CMAKE_PROJECT_NAME}
 # OpenMP, pthread, GLFW, GLAD, STB & FT
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${stb_SOURCE_DIR})
 
-find_package(OpenMP REQUIRED)
+if (NOT EMSCRIPTEN)
+    find_package(OpenMP REQUIRED)
+endif()
+
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OpenMP::OpenMP_C Threads::Threads glad freetype)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE #OpenMP::OpenMP_C 
+    Threads::Threads glad freetype miniaudio)
 
 if (NOT EMSCRIPTEN)
     set(GLFW_BUILD_WAYLAND ON CACHE BOOL "" FORCE)
@@ -118,12 +132,16 @@ if (NOT EMSCRIPTEN)
     target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glfw)
 endif()
 
-target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE -mavx2 -mfma)
+if (NOT EMSCRIPTEN)
+    target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE -mavx2 -mfma)
+endif()
 
-if(EMSCRIPTEN)
+if (EMSCRIPTEN)
     set(ASSETS_DIR "${CMAKE_SOURCE_DIR}/assets")
+    set(SHADERS_DIR "${CMAKE_SOURCE_DIR}/shaders")
     target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
-        "--preload-file" "${ASSETS_DIR}@/assets"
+        "SHELL:--preload-file ${ASSETS_DIR}@/assets"
+        "SHELL:--preload-file ${SHADERS_DIR}@/shaders"
 	    "-sMIN_WEBGL_VERSION=2"
 	    "-sMAX_WEBGL_VERSION=2"
         "-sUSE_GLFW=3"

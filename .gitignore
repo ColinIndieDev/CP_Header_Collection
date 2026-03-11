@@ -10,13 +10,13 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 build
+build_web
 .cache
 .clang-tidy
 save.bin
 saves
 data
 external
-shaders
 fonts
 assets
 highscore.bin

@@ -1,3 +1,5 @@
+#define CPL_IMPLEMENTATION
+
 #include "../cplibrary/cpl.h"
 #include "../cpstd/cparena.h"
 #include "../cpstd/cprng.h"
