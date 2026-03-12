@@ -14,6 +14,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-g -O0 -fno-omit-frame-pointer)
     add_compile_options(
         -fsanitize=address,undefined
+        -fsanitize-recover=address
         -fno-omit-frame-pointer
         -g
         -O0
@@ -146,15 +147,21 @@ if (EMSCRIPTEN)
         "-sUSE_GLFW=3"
         "-sALLOW_MEMORY_GROWTH=1"
         "-sFORCE_FILESYSTEM=1"
-        "-sSAFE_HEAP=1"
-
-        "-gsource-map" 
-        "-sASSERTIONS=2" 
-        "-sSTACK_SIZE=1mb" 
-        "-sDISABLE_EXCEPTION_CATCHING=0" 
-        "-fexceptions" 
-        "-sGL_DEBUG=1" 
-        "-g"
     )
+
+    # Debug
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_link_options(Example PRIVATE
+            "-sSAFE_HEAP=1"
+            "-gsource-map"
+            "-sASSERTIONS=2"
+            "-sSTACK_SIZE=1mb"
+            "-sDISABLE_EXCEPTION_CATCHING=0"
+            "-fexceptions"
+            "-sGL_DEBUG=1"
+            "-g"
+        )
+    endif()
+
     set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES SUFFIX ".html")
 endif()

@@ -106,6 +106,65 @@ typedef struct {
 
 // }}}
 
+// {{{ Forward Declarations
+
+neural_network *cpai_create_network(i32 i_neurons, veci hs_neurons,
+                                    i32 o_neurons, veci hidden_activations,
+                                    activation_type output_actiation,
+                                    loss_type output_loss, f32 momentum,
+                                    f32 learn_rate_decay, f32 label_smooth_rate,
+                                    b8 use_avx2);
+f32 cpai_randf_normal();
+void cpai_init_weights(neural_network *net);
+void cpai_destroy_network(neural_network *net);
+
+i32 cpai_reverse_i32(i32 i);
+mat2D cpai_load_images(char *path);
+veci cpai_load_labels(char *path);
+void cpai_load_network_bin(neural_network *net, char *path);
+void cpai_save_network_bin(neural_network *net, char *path);
+void cpai_load_train_data_network(neural_network *net, char *data_path,
+                                  char *label_path, i32 sol_row_len);
+void cpai_load_test_data_network(neural_network *net, char *data_path,
+                                 char *label_path);
+
+static f32 cpai_sigmoid(f32 x);
+static f32 cpai_sigmoid_deriv(f32 y);
+static f32 cpai_relu(f32 x);
+static f32 cpai_leaky_relu(f32 x);
+static f32 cpai_leaky_relu_deriv(f32 y);
+static f32 cpai_relu_deriv(f32 y);
+static f32 cpai_tanh(f32 x);
+static f32 cpai_tanh_deriv(f32 y);
+static void cpai_softmax(vecf *v);
+static f32 cpai_network_func(f32 x, activation_type a_type);
+static f32 cpai_network_func_deriv(f32 x, activation_type a_type);
+
+vecf cpai_feed_forward_avx2(neural_network *net, vecf *input);
+vecf cpai_feed_forward(neural_network *net, vecf *input);
+
+void cpai_reset_gradients(neural_network *net);
+void cpai_calc_output_avx2(neural_network *net, vec_vecf *hidden,
+                           vec_vecf *hidden_z, vecf *output, vecf *input);
+void cpai_calc_output(neural_network *net, vec_vecf *hidden, vec_vecf *hidden_z,
+                      vecf *output, vecf *input);
+void cpai_calc_delta(neural_network *net, vec_vecf *hidden, vec_vecf *hidden_z,
+                     vecf *output, vecf *input, vecf *target);
+void cpai_accumulate_gradient(neural_network *net, vecf *X, vecf *Y);
+void cpai_gradient_clipping(neural_network *net);
+b8 cpai_check_nan(vecf *v);
+void cpai_apply_gradient(neural_network *net, i32 batch_size, f32 learn_rate);
+
+f32 capi_calc_loss(neural_network *net, vecf *output, vecf *target);
+void cpai_shuffle_indices(u32 *indices, u32 count);
+void cpai_train_network(neural_network *net, f32 learn_rate, i32 epochs,
+                        i32 batch_size);
+f32 cpai_test_network(neural_network *net);
+
+// }}}
+
+#ifdef CPAI_IMPLEMENTATION
+
 // {{{ Init & destroy
 
 neural_network *cpai_create_network(i32 i_neurons, veci hs_neurons,
@@ -468,6 +527,7 @@ void cpai_load_train_data_network(neural_network *net, char *data_path,
         }
     }
 }
+
 void cpai_load_test_data_network(neural_network *net, char *data_path,
                                  char *label_path) {
     net->test_data = cpai_load_images(data_path);
@@ -1217,3 +1277,5 @@ f32 cpai_test_network(neural_network *net) {
 }
 
 // }}}
+
+#endif

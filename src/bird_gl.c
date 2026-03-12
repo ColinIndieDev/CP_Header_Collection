@@ -6,7 +6,7 @@
 #include <emscripten/emscripten.h>
 #endif
 
-#define SHOW_DETAILS false
+#define SHOW_DETAILS true
 
 // {{{ Start animation
 

@@ -1,3 +1,4 @@
+#define CPLT_IMPLEMENTATION
 #include "../cplterminal/cplt.h"
 #include "../cpstd/cpmath.h"
 #include "../cpstd/cprng.h"
@@ -120,7 +121,8 @@ void Draw(Player *p1, Player *p2, vec2f ballPos, i32 borderBegin, i32 borderEnd,
 
     cplt_draw_rect(0, borderBegin, width, 1, "-", WHITE);
     cplt_draw_rect(0, borderEnd, width, 1, "-", WHITE);
-    cplt_draw_rect(width / 2, borderBegin + 1, 1, CPM_ABS(borderBegin - borderEnd) - 1, "|", WHITE);
+    cplt_draw_rect(width / 2, borderBegin + 1, 1,
+                   CPM_ABS(borderBegin - borderEnd) - 1, "|", WHITE);
 
     cplt_draw_rect((i32)p1->pos.x, (i32)p1->pos.y, (i32)p1->size.x,
                    (i32)p1->size.y, "#", BLUE);

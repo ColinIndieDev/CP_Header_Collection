@@ -1,5 +1,5 @@
+#define CPLT_IMPLEMENTATION
 #include "../cplterminal/cplt.h"
-#include "../cpstd/cparena.h"
 #include "../cpstd/cpmath.h"
 #include "../cpstd/cprng.h"
 #include "../cpstd/cpvec.h"
@@ -14,21 +14,19 @@ int main() {
     cprng_rand_seed();
 
     snake_body snake;
-    int score = 0;
+    i32 score = 0;
     vec2f dir = {1.0f, 0.0f};
 
     vec2f apple = {(f32)(cprng_rand_range(1, WINDOW_WIDTH - 1)),
                    (f32)(cprng_rand_range(1, WINDOW_HEIGHT - 3))};
 
-    snake_body_init(&snake, 3, (vec2f){WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2});
+    snake_body_init(&snake, 3, (vec2f){cpm_floorf(WINDOW_WIDTH / 2.0f), cpm_floorf(WINDOW_HEIGHT / 2.0f)});
 
     snake_body_at(&snake, 1)->x += 1;
     snake_body_at(&snake, 2)->x += 2;
 
     f32 last_time = 0.0f;
     f32 time_dist = 0.1f;
-
-    mem_arena *arena = mem_arena_create(MiB(1));
 
     while (running) {
         cplt_calc_fps();
@@ -59,9 +57,9 @@ int main() {
                 while (snake.size > 3) {
                     snake_body_pop_back(&snake);
                 }
-                *snake_body_at(&snake, 0) = (vec2f){WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2};
-                *snake_body_at(&snake, 1) = (vec2f){(WINDOW_WIDTH / 2) + 1, WINDOW_HEIGHT / 2};
-                *snake_body_at(&snake, 2) = (vec2f){(WINDOW_WIDTH / 2) + 2, WINDOW_HEIGHT / 2};
+                *snake_body_at(&snake, 0) = (vec2f){cpm_floorf(WINDOW_WIDTH / 2.0f), cpm_floorf(WINDOW_HEIGHT / 2.0f)};
+                *snake_body_at(&snake, 1) = (vec2f){(cpm_floorf(WINDOW_WIDTH / 2.0f)) + 1, cpm_floorf(WINDOW_HEIGHT / 2.0f)};
+                *snake_body_at(&snake, 2) = (vec2f){(cpm_floorf(WINDOW_WIDTH / 2.0f) / 2) + 2, cpm_floorf(WINDOW_HEIGHT / 2.0f)};
 
                 apple = (vec2f){(f32)(cprng_rand_range(1, WINDOW_WIDTH - 2)),
                                 (f32)(cprng_rand_range(1, WINDOW_HEIGHT - 3))};
@@ -99,24 +97,20 @@ int main() {
         cplt_draw_rect(0, 1, 1, WINDOW_HEIGHT - 3, "|", WHITE);
         cplt_draw_rect(WINDOW_WIDTH - 1, 1, 1, WINDOW_HEIGHT - 3, "|", WHITE);
 
-        i8 *fps_str = mem_arena_push(arena, 16, true);
+        i8 fps_str[11];
         snprintf(fps_str, 11, "FPS: %d", fps);
         cplt_draw_text(0, WINDOW_HEIGHT - 1, fps_str, CYAN);
 
-        i8 *title = mem_arena_push(arena, 5, true);
-        title = "SNAKE";
+        i8 title[] = "SNAKE";
         cplt_draw_text((WINDOW_WIDTH / 2) - 3, WINDOW_HEIGHT - 1,
                        title, GREEN);
 
-        i8 *score_str = mem_arena_push(arena, 16, true);
+        i8 score_str[11];
         snprintf(score_str, 11, "Score: %d", score);
         cplt_draw_text(WINDOW_WIDTH - strlen(score_str), WINDOW_HEIGHT - 1,
                        score_str, YELLOW);
 
-        mem_arena_clear(arena);
-
         cplt_render();
     }
     snake_body_destroy(&snake);
-    mem_arena_destroy(arena);
 }

@@ -1,0 +1,15 @@
+LINUX
+==============================================================================
+1. Go to the project folder
+
+2. Execute this command:
+
+'
+cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local && sudo cmake --install build
+'
+
+3. Done you now should be able to include any header of the cpstd like this:
+
+'
+#include <cpstd/cpvec.h>
+'

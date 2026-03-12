@@ -1,3 +1,4 @@
+#define CPAI_IMPLEMENTATION
 #include "../cpai/cpai.h"
 
 int main() {

@@ -7,13 +7,13 @@
 #include <GLFW/glfw3.h>
 
 #include <malloc.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
-
-#include <pthread.h>
 
 #ifdef CPL_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
@@ -448,7 +448,6 @@ void cpl_display_details(font *font);
 
 // }}}
 
-#define CPL_IMPLEMENTATION
 #ifdef CPL_IMPLEMENTATION
 
 // {{{ Logging
@@ -1357,7 +1356,8 @@ b8 cpl_check_collision_vec2f_circle(vec2f *a, circle_collider *b) {
 
 // {{{ Window
 
-void cpl_framebuffer_size_callback(GLFWwindow *window, i32 width, i32 height) {
+void cpl_framebuffer_size_callback([[maybe_unused]] GLFWwindow *window,
+                                   i32 width, i32 height) {
     glViewport(0, 0, width, height);
     cpl_screen_width = (f32)width;
     cpl_screen_height = (f32)height;
@@ -1599,7 +1599,8 @@ void cpl_update_input() {
         prev_key_states[i] = key_states[i];
     }
     for (u32 key = CPL_KEY_SPACE; key <= CPL_KEY_LAST; key++) {
-        key_states[key] = glfwGetKey(cpl_window, (i32)key) == GLFW_PRESS;
+        key_states[key - CPL_KEY_SPACE] =
+            glfwGetKey(cpl_window, (i32)key) == GLFW_PRESS;
     }
 
     for (u32 i = 0; i < CPL_MOUSE_BUTTON_LAST - CPL_MOUSE_BUTTON_1; i++) {
@@ -1607,26 +1608,30 @@ void cpl_update_input() {
     }
     for (u32 button = CPL_MOUSE_BUTTON_1; button <= CPL_MOUSE_BUTTON_LAST;
          button++) {
-        mouse_button_states[button] =
+        mouse_button_states[button - CPL_MOUSE_BUTTON_1] =
             glfwGetMouseButton(cpl_window, (i32)button) == GLFW_PRESS;
     }
 }
 
-b8 cpl_is_key_down(i32 key) { return key_states[key]; }
-b8 cpl_is_key_up(i32 key) { return !key_states[key]; }
+b8 cpl_is_key_down(i32 key) { return key_states[key - CPL_KEY_SPACE]; }
+b8 cpl_is_key_up(i32 key) { return !key_states[key - CPL_KEY_SPACE]; }
 b8 cpl_is_key_pressed(i32 key) {
-    return key_states[key] && !prev_key_states[key];
+    return key_states[key] && !prev_key_states[key - CPL_KEY_SPACE];
 }
 b8 cpl_is_key_released(i32 key) {
-    return !key_states[key] && prev_key_states[key];
+    return !key_states[key] && prev_key_states[key - CPL_KEY_SPACE];
 }
 
-b8 cpl_is_mouse_down(i32 button) { return mouse_button_states[button]; }
+b8 cpl_is_mouse_down(i32 button) {
+    return mouse_button_states[button - CPL_MOUSE_BUTTON_1];
+}
 b8 cpl_is_mouse_pressed(i32 button) {
-    return mouse_button_states[button] && !prev_mouse_button_states[button];
+    return mouse_button_states[button] &&
+           !prev_mouse_button_states[button - CPL_MOUSE_BUTTON_1];
 }
 b8 cpl_is_mouse_released(i32 button) {
-    return !mouse_button_states[button] && prev_mouse_button_states[button];
+    return !mouse_button_states[button] &&
+           prev_mouse_button_states[button - CPL_MOUSE_BUTTON_1];
 }
 vec2f cpl_get_mouse_pos() {
     f64 x = 0;
@@ -1635,19 +1640,12 @@ vec2f cpl_get_mouse_pos() {
     return (vec2f){(f32)x, (f32)y};
 }
 
-b8 cpl_is_key_down_old(i32 key) {
-    if (glfwGetKey(cpl_window, key) == GLFW_PRESS) {
-        return true;
-    }
-    return false;
-}
-
 // }}}
 
 // {{{ Timing
 
 void cpl_calc_fps() {
-    f32 cur_time = (f32)glfwGetTime();
+    f32 cur_time = cpl_get_time();
     cpl_nb_frames++;
     if (cur_time - cpl_last_time >= 1.0) {
         cpl_fps = cpl_nb_frames;
@@ -1658,13 +1656,24 @@ void cpl_calc_fps() {
 i32 cpl_get_fps() { return cpl_fps; }
 
 void cpl_calc_dt() {
-    f32 cur_frame = (f32)glfwGetTime();
+    f32 cur_frame = cpl_get_time();
     cpl_dt = (cur_frame - cpl_last_frame) * cpl_time_scale;
     cpl_last_frame = cur_frame;
 }
 
 f32 cpl_get_dt() { return cpl_dt; }
-f32 cpl_get_time() { return (f32)glfwGetTime(); }
+f32 cpl_get_time() {
+    static struct timespec start_ts;
+    static b8 initialized = false;
+    struct timespec cur_ts;
+    if (!initialized) {
+        clock_gettime(CLOCK_MONOTONIC, &start_ts);
+        initialized = true;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &cur_ts);
+    return (f32)((f64)(cur_ts.tv_sec - start_ts.tv_sec) +
+                 ((f64)(cur_ts.tv_nsec - start_ts.tv_nsec) * 1e-9));
+}
 f32 cpl_get_time_scale() { return cpl_time_scale; }
 
 void cpl_set_time_scale(f32 scale) { cpl_time_scale = scale; }

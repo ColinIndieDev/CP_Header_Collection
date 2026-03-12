@@ -22,8 +22,8 @@ i8 *screen_buf;
 i32 *col_buf;
 i8 bg_col[22] = "\x1b[48;2;0;0;0m";
 
-bool frame_sync = true;
-bool running = true;
+b8 frame_sync = true;
+b8 running = true;
 
 i32 nb_frames = 0;
 i32 fps = 0;
@@ -42,6 +42,14 @@ f32 dt = 0.0f;
 #define YELLOW (rgb){255, 255, 0}
 #define CYAN (rgb){0, 255, 255}
 
+#define CPLT_MAX_KEYS 256
+#define CPLT_KEY_TIMEOUT 0.6f
+
+b8 keyDown[CPLT_MAX_KEYS] = {false};
+b8 keyPressed[CPLT_MAX_KEYS] = {false};
+b8 keyReleased[CPLT_MAX_KEYS] = {false};
+f32 keyTimers[CPLT_MAX_KEYS] = {0};
+
 typedef struct {
     u8 r, g, b;
 } rgb;
@@ -51,6 +59,40 @@ typedef struct {
 } rect;
 
 struct termios orig_termios;
+
+void cplt_disable_raw_mode();
+void cplt_activate_raw_mode();
+void cplt_hide_cursor(b8 hide);
+void cplt_init(i32 w, i32 h);
+
+u32 cplt_get_heap_size();
+u32 cplt_get_heap_used();
+u32 cplt_get_heap_free();
+u32 cplt_get_stack_size();
+u32 cplt_get_stack_used();
+
+f32 cplt_get_time();
+f32 cplt_get_dt();
+void cplt_calc_fps();
+void cplt_calc_dt();
+b8 cplt_check_collision_rects(rect *a, rect *b);
+
+void cplt_update_input();
+b8 cplt_is_key_down(i8 key);
+b8 cplt_is_key_pressed(i8 key);
+b8 cplt_is_key_released(i8 key);
+i32 cplt_rgb_to_i32(rgb color);
+
+void cplt_render();
+void cplt_clear(i8 c, rgb color);
+void cplt_clear_bg(rgb color);
+void cplt_draw_pixel(i32 x, i32 y, const i8 *c, rgb color);
+void cplt_draw_text(i32 x, i32 y, i8 *text, rgb color);
+void cplt_draw_rect(i32 x, i32 y, i32 w, i32 h, i8 *c, rgb color);
+void cplt_draw_circle(i32 cx, i32 cy, i32 r, i8 *c, rgb color);
+void cplt_draw_circle_out(i32 cx, i32 cy, i32 r, i8 *c, rgb color);
+
+#ifdef CPLT_IMPLEMENTATION
 
 void cplt_disable_raw_mode() {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
@@ -77,7 +119,7 @@ void cplt_activate_raw_mode() {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
-void cplt_hide_cursor(bool hide) {
+void cplt_hide_cursor(b8 hide) {
     if (hide) {
         write(STDOUT_FILENO, "\x1b[?25l", 6);
     } else {
@@ -173,14 +215,6 @@ b8 cplt_check_collision_rects(rect *a, rect *b) {
 
 // {{{ Inputs
 
-#define CPLT_MAX_KEYS 256
-#define CPLT_KEY_TIMEOUT 0.6f
-
-bool keyDown[CPLT_MAX_KEYS] = {false};
-bool keyPressed[CPLT_MAX_KEYS] = {false};
-bool keyReleased[CPLT_MAX_KEYS] = {false};
-f32 keyTimers[CPLT_MAX_KEYS] = {0};
-
 void cplt_update_input() {
     f32 now = cplt_get_time();
 
@@ -208,11 +242,11 @@ void cplt_update_input() {
     }
 }
 
-bool cplt_is_key_down(i8 key) { return keyDown[(u8)key]; }
+b8 cplt_is_key_down(i8 key) { return keyDown[(u8)key]; }
 
-bool cplt_is_key_pressed(i8 key) { return keyPressed[(u8)key]; }
+b8 cplt_is_key_pressed(i8 key) { return keyPressed[(u8)key]; }
 
-bool cplt_is_key_released(i8 key) { return keyReleased[(u8)key]; }
+b8 cplt_is_key_released(i8 key) { return keyReleased[(u8)key]; }
 
 // }}}
 
@@ -398,3 +432,5 @@ void cplt_draw_circle_out(i32 cx, i32 cy, i32 r, i8 *c, rgb color) {
 }
 
 // }}}
+
+#endif
